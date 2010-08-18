@@ -1,0 +1,11 @@
+#!/bin/bash
+
+echo "cythoning galife.pyx"
+cython galife.pyx
+echo "compiling galife.c"
+i686-mingw32-gcc -w -c galife.c -I$MINGWCC/include/python27
+i686-mingw32-gcc -w -shared galife.o -L$MINGWCC/lib/python27 -lpython27  -o galife.pyd
+
+echo "cleaning up"
+rm -d build
+rm galife.c
