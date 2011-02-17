@@ -1,6 +1,0 @@
-#!/bin/bash
-python setup.py build_ext -i
-
-echo "cleaning up"
-rm -fd build
-rm galife.c
