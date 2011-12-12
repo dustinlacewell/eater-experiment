@@ -1,6 +1,6 @@
 import curses
 
-from eaters.app import App
+from eaters.app import CursesApp
 
 screen = curses.initscr()
 

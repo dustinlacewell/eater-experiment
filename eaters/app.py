@@ -1,3 +1,9 @@
+import time
+import random
+import curses 
+
+from eaters.tile import *
+from eaters.peater import Peater
 
 class CursesApp(object):
 
