@@ -11,9 +11,9 @@ class Agent(Tile):
     RIGHT = 2
     DOWN = 3
     LEFT = 4
-    ACTIONS = [WAIT, UP, RIGHT, DOWN, LEFT]
+    ACTIONS = [UP, RIGHT, DOWN, LEFT]
 
-    NSTATES = 3
+    NSTATES = 10
 
     char = '?'
 
@@ -90,13 +90,13 @@ class Peater(Agent):
     def update(self, world):
         neighbors = self.get_neighbors(world)
         state, action = self.genome[(self.state, neighbors)]
-        if action == 1:
+        if action == 0:
             self.do_up(world, neighbors)
-        elif action == 2:
+        elif action == 1:
             self.do_right(world, neighbors)
-        elif action == 3:
+        elif action == 2:
             self.do_down(world, neighbors)
-        elif action == 4:
+        elif action == 3:
             self.do_left(world, neighbors)
 
     def do_wait(self, world):

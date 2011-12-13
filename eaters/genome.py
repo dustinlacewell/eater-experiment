@@ -146,7 +146,7 @@ class GMap(GenomeBase, GMapBase):
              self.evaluator.set(GMapEvaluator)
 
     def choose(self):
-        return (random.randint(0, self.nstates), random.choice(self.values))
+        return (random.randint(0, self.nstates - 1), random.choice(self.values))
             
     def copy(self, g):
         GenomeBase.copy(self, g)
