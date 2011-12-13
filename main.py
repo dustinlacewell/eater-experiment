@@ -20,6 +20,7 @@ try:
     curses.nocbreak()
     curses.echo()
     curses.endwin()
+    app.ga.printStats()
 except:
     pass
 

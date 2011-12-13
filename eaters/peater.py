@@ -13,7 +13,7 @@ class Agent(Tile):
     LEFT = 4
     ACTIONS = [UP, RIGHT, DOWN, LEFT]
 
-    NSTATES = 10
+    NSTATES = 4
 
     char = '?'
 
@@ -88,7 +88,14 @@ class Peater(Agent):
     char = 'x'
 
     def update(self, world):
-        neighbors = self.get_neighbors(world)
+        _neighbors = self.get_neighbors(world)
+        neighbors = list()
+        for n in _neighbors:
+            if n in [Wall, Peater]:
+                neighbors.append(Wall)
+            else:
+                neighbors.append(n)
+        neighbors = tuple(neighbors)
         state, action = self.genome[(self.state, neighbors)]
         if action == 0:
             self.do_up(world, neighbors)
