@@ -15,15 +15,30 @@ from eaters.genome import *
 
 class CursesApp(object):
 
-    def __init__(self, screen):
+    def __init__(self, screen, **kwargs):
         self._start_screen(screen)
-        self.delay = .08
-        self.do_draw = True
-        self.paused = False
-        self.ga = self.initialize_evolver()
+        self.initialize_options(**kwargs)
+        self.initialize_evolver()
 
     def start(self):
         self.ga.evolve(self.initialize_world)
+
+    def initialize_options(self, **kwargs):
+        self.delay = kwargs.get('delay', 0.0)
+        self.draw = kwargs.get('draw', False)
+        self.paused = False
+
+    def initialize_evolver(self):
+        keys = list(itertools.product(OBJECTS, repeat=4))
+        sample = GMap(keys, Peater.ACTIONS, 4)
+        sample.evaluator.set = GMapEvaluator
+        ga = GSimulationGA(sample)
+        ga.setPopulationSize(20)
+        ga.setGenerations(25000)
+        ga.setMutationRate(.1)
+        ga.selector.set(Selectors.GTournamentSelector)
+        ga.minimax = Consts.minimaxType['maximize']
+        self.ga = ga
 
     def initialize_world(self, generation, population):
         self.world = HookableDict()
@@ -36,18 +51,27 @@ class CursesApp(object):
         self.populate_world(generation, population)
         self.run()
         
-    def initialize_evolver(self):
-        keys = list(itertools.product(OBJECTS, repeat=4))
-        sample = GMap(keys, Peater.ACTIONS, Peater.NSTATES)
-        sample.evaluator.set = GMapEvaluator
-        ga = GSimulationGA(sample)
-        ga.setPopulationSize(20)
-        ga.setGenerations(250)
-        ga.setMutationRate(.1)
-        ga.selector.set(Selectors.GTournamentSelector)
-        ga.minimax = Consts.minimaxType['maximize']
-        
-        return ga
+    def populate_world(self, generation, population):
+        height, width = self.screen.getmaxyx()
+        for y in range(height - 1):
+            for x in range(width):
+                tile = None
+                if x == 0 or x == width - 1:
+                    tile = Wall()
+                elif y == 0 or y == height - 2:
+                    tile = Wall()
+                elif random.randint(0, 5) == 0:
+                    tile = Plant()
+                if tile:
+                    self.world[(y, x)] = tile
+
+        for individual in population:
+            y = random.randint(2, height - 4)
+            x = random.randint(2, width - 4)
+            self.peaters.append(Peater(y, x, genome=individual))
+        self.buffer = dict()
+        for key, val in self.world.items():
+            self.buffer[key] = val
 
     def _start_screen(self, screen):
         self.screen = screen
@@ -73,29 +97,6 @@ class CursesApp(object):
         curses.echo()
         curses.endwin()
         self.screen = None
-
-    def populate_world(self, generation, population):
-        height, width = self.screen.getmaxyx()
-        for y in range(height - 1):
-            for x in range(width):
-                tile = None
-                if x == 0 or x == width - 1:
-                    tile = Wall()
-                elif y == 0 or y == height - 2:
-                    tile = Wall()
-                elif random.randint(0, 5) == 0:
-                    tile = Plant()
-                if tile:
-                    self.world[(y, x)] = tile
-
-        for individual in population:
-            y = random.randint(2, height - 4)
-            x = random.randint(2, width - 4)
-            self.peaters.append(Peater(y, x, genome=individual))
-        self.buffer = dict()
-        for key, val in self.world.items():
-            self.buffer[key] = val
-
 
     def world_changed(self, coord, tile):
         self.buffer[coord] = tile
@@ -133,7 +134,7 @@ class CursesApp(object):
         self.paused = False
         c = self.screen.getch()
         if c == ord(' '):
-            self.do_draw = not self.do_draw
+            self.draw = not self.draw
             self.screen.clear()
         elif c == 339:
             self.delay = min(2.0, self.delay + .001)
@@ -146,7 +147,7 @@ class CursesApp(object):
         iterations = 0
         running = True
         cache = False
-        if self.do_draw:
+        if self.draw:
             self.screen.clear()
         try:
             while running:
@@ -155,17 +156,20 @@ class CursesApp(object):
                 if self.handle_cache():
                     cache = True
                 self.handle_keys()
-                if self.do_draw:
+                if self.draw:
                     self._render_world()
                     self.screen.clearok(0)
                     self.screen.refresh()
-                    sleep(self.delay)
+                    try:
+                        sleep(self.delay)
+                    except KeyboardInterrupt:
+                        running = False
                 if cache:
                     cache = False
                     raise AssertionError()
                 iterations += 1
         except AssertionError, e:
-            if not self.do_draw:
+            if not self.draw:
                 self.screen.move(0, 0)
                 gen = self.ga.currentGeneration
                 msg = self.ga.internalPop.printStats()
