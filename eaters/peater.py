@@ -52,32 +52,32 @@ class Agent(Tile):
             genome.append(state)
         return genome
 
-    def update(self, world):
+    def update(self, world, colors):
         neighbors = self.get_neighbors(world)
         state, action = self.genome[(self.state, neighbors)]
 
     def do_wait(self, world):
         pass
 
-    def do_up(self, world, neighbors):
+    def do_up(self, neighbors, world, colors):
         if neighbors[0] == Space:
             world[(self.y, self.x)] = Space()
             self.y -= 1
             world[(self.y, self.x)] = self
 
-    def do_right(self, world, neighbors):
+    def do_right(self, neighbors, world, colors):
         if neighbors[1] == Space:
             world[(self.y, self.x)] = Space()
             self.x += 1
             world[(self.y, self.x)] = self
 
-    def do_down(self, world, neighbors):
+    def do_down(self, neighbors, world, colors):
         if neighbors[2] == Space:
             world[(self.y, self.x)] = Space()
             self.y += 1
             world[(self.y, self.x)] = self
 
-    def do_left(self, world, neighbors):
+    def do_left(self, neighbors, world, colors):
         if neighbors[3] == Space:
             world[(self.y, self.x)] = Space()
             self.x -= 1
@@ -87,7 +87,7 @@ class Agent(Tile):
 class Peater(Agent):
     char = 'x'
 
-    def update(self, world):
+    def update(self, world, colors):
         _neighbors = self.get_neighbors(world)
         neighbors = list()
         for n in _neighbors:
@@ -97,53 +97,55 @@ class Peater(Agent):
                 neighbors.append(n)
         neighbors = tuple(neighbors)
         state, action = self.genome[(self.state, neighbors)]
+
         if action == 0:
-            self.do_up(world, neighbors)
+            self.do_up(neighbors, world, colors)
         elif action == 1:
-            self.do_right(world, neighbors)
+            self.do_right(neighbors, world, colors)
         elif action == 2:
-            self.do_down(world, neighbors)
+            self.do_down(neighbors, world, colors)
         elif action == 3:
-            self.do_left(world, neighbors)
+            self.do_left(neighbors, world, colors)
 
     def do_wait(self, world):
         pass
 
-    def do_up(self, world, neighbors):
+    def do_up(self, neighbors, world, colors):
         if neighbors[0] not in [Wall, Peater]:
             world[(self.y, self.x)] = Space()
             self.y -= 1
             world[(self.y, self.x)] = self
         if neighbors[0] == Plant():
             self.genome.simscore += 1
-            self.score = 99
+            colors[(self.y, self.x)] = 2
 
-    def do_right(self, world, neighbors):
+    def do_right(self, neighbors, world, colors):
         if neighbors[1] not in [Wall, Peater]:
             world[(self.y, self.x)] = Space()
             self.x += 1
             world[(self.y, self.x)] = self
         if neighbors[1] == Plant():
             self.genome.simscore += 1
-            self.score = 99
+            colors[(self.y, self.x)] = 2
 
-    def do_down(self, world, neighbors):
+    def do_down(self, neighbors, world, colors):
         if neighbors[2] not in [Wall, Peater]:
             world[(self.y, self.x)] = Space()
             self.y += 1
             world[(self.y, self.x)] = self
         if neighbors[2] == Plant():
             self.genome.simscore += 1
-            self.score = 99
+            colors[(self.y, self.x)] = 2
 
-    def do_left(self, world, neighbors):
+
+    def do_left(self, neighbors, world, colors):
         if neighbors[3] not in [Wall, Peater]:
             world[(self.y, self.x)] = Space()
             self.x -= 1
             world[(self.y, self.x)] = self
         if neighbors[3] == Plant():
             self.genome.simscore += 1
-            self.score = 99
+            colors[(self.y, self.x)] = 2
 
 
 OBJECTS = [Space, Wall, Plant, Peater]
