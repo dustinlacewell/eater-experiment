@@ -1,22 +1,38 @@
 import pdb
 
 class InnerBag(object):
-    def __init__(self, bag, ns):
-        self.namespace = ns
+    def __init__(self, valid=False):
+        self.valid = bool(valid)
         self.locked = False
+
+    def __eq__(self, other):
+        return self.valid == bool(other)
+
     def __repr__(self):
-        return self.namespace
+        return str(self.valid)
 
     def __str__(self):
-        return self.namespace
+        return str(self.valid)
+
+    def __getattr__(self, name):
+        try:
+            super(InnerBag, self).__getattr__(name)
+        except AttributeError:
+            if name != 'locked':
+                return InnerBag()
 
     def __setattr__(self, name, value):
+        print "Setting", id(self), name, value
         if not hasattr(self, 'locked'):
             super(InnerBag, self).__setattr__(name, value)
-        elif not self.locked:
+        elif name == 'locked':
+            super(InnerBag, self).__setattr__('locked', value)
+        elif not self.locked or isinstance(value, InnerBag):
             super(InnerBag, self).__setattr__(name, value)
-            self.locked = True
-        raise AttributeError('InnerBag is locked.')
+            super(InnerBag, self).__setattr__('locked', True)
+        else:
+            print hasattr(self, 'locked')
+            raise AttributeError((name, value))
 
 
 class Bag(object):
@@ -33,7 +49,6 @@ class Bag(object):
         if not k in self.__members:
             self.__members.append(k)
 
-
     def __getitem__(self, key):
         """Equivalent of dict access by key."""
         try:
@@ -46,6 +61,7 @@ class Bag(object):
         tree = self
         for idx, part in enumerate(parts):
             if idx == len(parts) - 1:
+                pdb.set_trace()
                 setattr(tree, part, value)
                 return
             if hasattr(tree, part):
@@ -53,7 +69,7 @@ class Bag(object):
                 if isinstance(obj, InnerBag):
                     tree = obj
                     continue
-            setattr(tree, part, InnerBag(self, '.'.join(parts[:idx+1])))
+            setattr(tree, part, InnerBag('.'.join(parts[:idx+1])))
             tree = getattr(tree, part)
         self.__remember(key)
 
