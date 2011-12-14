@@ -14,8 +14,8 @@ SOUTH = 3
 WEST = 4
 
 class Agent(tiles.Tile):
-    ACTIONS = [NORTH, EAST, SOUTH, WEST]
-    CHAR = '?'
+    choices = [NORTH, EAST, SOUTH, WEST]
+    char = '?'
 
     def __init__(self, y, x, genome=None):
         self.y = y
@@ -29,7 +29,7 @@ class Agent(tiles.Tile):
                         self.do_west,)
 
     def __str__(self):
-        return self.CHAR
+        return self.char
 
     def __nstates__(self):
         return len(self.genome)
@@ -91,7 +91,7 @@ class Agent(tiles.Tile):
         for x in range(self.nstates):
             state = dict()
             for key in itertools.product(tiles.all(), repeat=4):
-                action = random.choice(self.ACTIONS)
+                action = random.choice(self.choices)
                 newstate = random.randint(0, self.nstates - 1)
                 state[key] = (action, newstate)
             genome.append(state)

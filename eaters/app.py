@@ -31,7 +31,7 @@ class CursesApp(object):
 
     def initialize_evolver(self):
         keys = list(itertools.product(tiles.all(), repeat=4))
-        sample = GMap(keys, Peater.ACTIONS, 8)
+        sample = GMap(keys, Peater.choices, 8)
         sample.evaluator.set = GMapEvaluator
         ga = GSimulationGA(sample)
         ga.setPopulationSize(5)
