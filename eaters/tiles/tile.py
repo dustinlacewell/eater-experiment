@@ -14,12 +14,3 @@ class Tile(object):
     def __repr__(self):
         return self.__str__()
 
-class Space(Tile):
-    char = '.'
-
-class Wall(Tile):
-    char = '#'
-
-class Plant(Tile):
-    char = '%'
-

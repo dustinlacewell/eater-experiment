@@ -92,6 +92,9 @@ class GMapBase:
     def __eq__(self, other):
         return self.genome == other.genome
 
+    def __len__(self):
+        return self.nstates
+
     def __contains__(self, keypair):
         state, key = keypair
         return key in self.genome[state]
@@ -116,7 +119,6 @@ class GMapBase:
         g.keys = self.keys
         g.values = self.values
         g.nstates = self.nstates
-        g.simscore = self.simscore
         genome = list()
         for state in self.genome:
             genome.append(state.copy())

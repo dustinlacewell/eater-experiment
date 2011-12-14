@@ -7,8 +7,9 @@ import curses
 from pyevolve.GSimpleGA import GSimpleGA
 from pyevolve import Selectors
 
-from eaters.tile import *
-from eaters.peater import Peater, OBJECTS
+from eaters import tiles
+from eaters.tiles.basic import *
+from eaters.peater import Peater
 from eaters.hookabledict import HookableDict
 from eaters.genome import *
 
@@ -25,15 +26,15 @@ class CursesApp(object):
 
     def initialize_options(self, **kwargs):
         self.delay = kwargs.get('delay', 0.0)
-        self.draw = kwargs.get('draw', False)
+        self.draw = kwargs.get('draw', True)
         self.paused = False
 
     def initialize_evolver(self):
-        keys = list(itertools.product(OBJECTS, repeat=4))
-        sample = GMap(keys, Peater.ACTIONS, 4)
+        keys = list(itertools.product(tiles.all(), repeat=4))
+        sample = GMap(keys, Peater.ACTIONS, 8)
         sample.evaluator.set = GMapEvaluator
         ga = GSimulationGA(sample)
-        ga.setPopulationSize(20)
+        ga.setPopulationSize(5)
         ga.setGenerations(25000)
         ga.setMutationRate(.1)
         ga.selector.set(Selectors.GTournamentSelector)
@@ -45,8 +46,6 @@ class CursesApp(object):
         self.world.hook('setitem', self.world_changed)
         self.buffer = dict()
         self.colors = dict()
-        self.cache = dict()
-        self.cache_dt = 0
         self.peaters = list()
         self.populate_world(generation, population)
         self.run()
@@ -123,58 +122,69 @@ class CursesApp(object):
 
     def handle_cache(self):
         if self.buffer == self.cache:
-            return True
+            return False
         else:
             self.cache_dt += 1
         if self.cache_dt == 350:
             self.cache_dt = 0
             self.cache = self.buffer
+        return True
 
     def handle_keys(self):
         self.paused = False
         c = self.screen.getch()
-        if c == ord(' '):
+        if c == 9:
             self.draw = not self.draw
             self.screen.clear()
+        elif c == 32:
+            return False
         elif c == 339:
             self.delay = min(2.0, self.delay + .001)
         elif c == 338:
             self.delay = max(0.0, self.delay - .001)
         elif c == ord('p'):
             while self.screen.getch() == -1: pass
+        elif c != -1:
+            raise Exception(str(c))
+        return True
+
+    def handle_agents(self):
+        for p in self.peaters:
+            p.update(self.world, self.colors)
+        return True
 
     def run(self):
+        total_score = 0
+        twf = 0
         iterations = 0
         running = True
         cache = False
         if self.draw:
             self.screen.clear()
-        try:
-            while running:
-                for p in self.peaters:
-                    p.update(self.world, self.colors)
-                if self.handle_cache():
-                    cache = True
-                self.handle_keys()
-                if self.draw:
-                    self._render_world()
-                    self.screen.clearok(0)
-                    self.screen.refresh()
-                    try:
-                        sleep(self.delay)
-                    except KeyboardInterrupt:
-                        running = False
-                if cache:
-                    cache = False
-                    raise AssertionError()
-                iterations += 1
-        except AssertionError, e:
-            if not self.draw:
-                self.screen.move(0, 0)
-                gen = self.ga.currentGeneration
-                msg = self.ga.internalPop.printStats()
-                self.screen.addstr(0, 0, "%s (%s): %s" % (gen, self.delay, msg))
-                self.screen.clearok(1)
+        while running:
+            running = (self.handle_agents()
+                   and self.handle_keys())
+            new_total = sum(e.genome.simscore for e in self.peaters)
+            if new_total == total_score:
+                twf += 1
+            else:
+                twf = 0
+                total_score = new_total
+            if twf > 500:
+                running = False
+
+            if self.draw:
+                self._render_world()
+                self.screen.clearok(0)
                 self.screen.refresh()
+                sleep(self.delay)
+            iterations += 1
+        if not self.draw:
+            self.screen.move(0, 0)
+            gen = self.ga.currentGeneration
+            msg = self.ga.internalPop.printStats()
+            self.screen.addstr(0, 0, "%s (%s): %s" % (gen, self.delay, msg))
+            self.screen.clearok(1)
+            self.screen.refresh()
         
             

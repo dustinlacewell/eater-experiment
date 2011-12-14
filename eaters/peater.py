@@ -3,7 +3,8 @@ import random
 import itertools
 import pdb 
 
-from eaters.tile import *
+from eaters import tiles
+from eaters.tiles.basic import *
 
 # ACTIONS
 WAIT = 0
@@ -12,16 +13,16 @@ EAST = 2
 SOUTH = 3
 WEST = 4
 
-class Agent(Tile):
+class Agent(tiles.Tile):
     ACTIONS = [NORTH, EAST, SOUTH, WEST]
     CHAR = '?'
 
     def __init__(self, y, x, genome=None):
         self.y = y
         self.x = x
-        self.state = 0
         self.heading = None
         self.genome = genome
+        self.state = random.randint(0, len(self.genome) - 1)
         self.actions = (self.do_north,
                         self.do_east,
                         self.do_south,
@@ -79,7 +80,7 @@ class Agent(Tile):
             neighbors.append(self.neighbor_west(world))
 
         for idx, n in enumerate(neighbors):
-            for cls in OBJECTS:
+            for cls in tiles.all():
                 if cls.char == n.char:
                     neighbors[idx] = cls
                     break
@@ -89,7 +90,7 @@ class Agent(Tile):
         genome = list()
         for x in range(self.nstates):
             state = dict()
-            for key in itertools.product(OBJECTS, repeat=4):
+            for key in itertools.product(tiles.all(), repeat=4):
                 action = random.choice(self.ACTIONS)
                 newstate = random.randint(0, self.nstates - 1)
                 state[key] = (action, newstate)
@@ -98,7 +99,9 @@ class Agent(Tile):
 
     def update(self, world, colors):
         neighbors = self.get_neighbors(world)
-        self.state, action = self.genome[(self.state, neighbors)]
+        valpair = self.genome[(self.state, neighbors)]
+
+        self.state, action = valpair
         self.actions[action - 1](neighbors, world, colors)
 
     def do_wait(self, world):
@@ -166,6 +169,4 @@ class Peater(Agent):
         if neighbors[3] == Plant():
             self.genome.simscore += 1
             colors[(self.y, self.x)] = 2
-
-
-OBJECTS = [Space, Wall, Plant, Peater]
+tiles.register(Peater)
