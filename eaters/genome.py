@@ -1,4 +1,3 @@
-from pudb import set_trace
 import random
 import logging
 from time import time
@@ -18,8 +17,6 @@ def GMapInitializator(genome, **args):
     for state in xrange(nstates):
         for key in keys:
             genome.genome[state][key] = genome.choose()
-
-o['ga.mutator.pmut'] = 0.0
 
 def GMapMutator(genome, **kwargs):
     pmut = kwargs.get('pmut', o.ga.mutator.pmut)
