@@ -1,4 +1,3 @@
-import pdb
 import itertools
 from time import sleep
 import random
@@ -28,12 +27,11 @@ o['app.render.maxdelay'] = 0.3
 o['app.render.delaydiff'] = 0.01
 o['app.render.delay'] = 0.0
 o['app.render.trail'] = True
-o['app.render.trailsteps'] = 500
 o['app.render.trailcolor'] = 3
 
 # GA General
-o['ga.general.population'] = 5
-o['ga.general.generations'] = 100
+o['ga.general.population'] = 50
+o['ga.general.generations'] = 1000
 o['ga.general.staleticks'] = 350
 # GA Evaluation
 o['ga.evaluator.elites'] = 2
@@ -95,7 +93,7 @@ class CursesApp(object):
                     tile = Wall()
                 elif y == 0 or y == height - 2:
                     tile = Wall()
-                elif random.randint(0, 5) == 0:
+                elif random.randint(0, 20) == 0:
                     tile = Plant()
                 if tile:
                     self.world[(y, x)] = tile
@@ -144,13 +142,15 @@ class CursesApp(object):
             self.king.eraser = []
             for y, x in (coord for coord, draw in self.king.trail.iteritems() if draw):
                 self.colors[(y, x)] = o.app.render.trailcolor
-                self.king.trail[(y, x)] = False
+#                self.king.trail[(y, x)] = False
         for coord, tile in self.buffer.items():
             y, x = coord
             self.screen.addch(y, x, ord(tile.char), curses.color_pair(1))
         for coord, color in self.colors.items():
             y, x = coord
             self.screen.chgat(y, x, 1, curses.color_pair(color))
+        if self.king:
+            self.screen.addch(self.king.y, self.king.x, ord(tile.char), curses.color_pair(2))
         self.buffer = dict()
         self.colors = dict()
 

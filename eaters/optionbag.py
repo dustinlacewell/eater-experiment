@@ -1,5 +1,3 @@
-from pudb import set_trace
-
 class BagOptionException(BaseException):
     def __init__(self, attribute):
         message = "Cannot set uninitialized option `%s'." % attribute

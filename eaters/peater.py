@@ -1,7 +1,6 @@
 import time
 import random
 import itertools
-import pdb 
 
 from eaters import tiles
 from eaters.tiles.basic import *
