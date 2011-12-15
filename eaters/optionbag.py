@@ -37,6 +37,8 @@ class InnerBag(object):
         return False
 
     def __getattr__(self, name):
+        if not self.valid:
+            return InnerBag()
         try:
             super(InnerBag, self).__getattribute__(name)
         except AttributeError:

@@ -28,9 +28,8 @@ o['app.render.delaydiff'] = 0.01
 o['app.render.delay'] = 0.0
 o['app.render.trail'] = True
 o['app.render.trailcolor'] = 3
-
 # GA General
-o['ga.general.population'] = 50
+o['ga.general.population'] = 5
 o['ga.general.generations'] = 1000
 o['ga.general.staleticks'] = 350
 # GA Evaluation
@@ -48,6 +47,10 @@ class CursesApp(object):
         self.initialize_options()
         self.initialize_evolver()
 
+        curses.init_pair(1, curses.COLOR_WHITE, -1)
+        curses.init_pair(2, -1, curses.COLOR_GREEN)
+        curses.init_pair(3, curses.COLOR_GREEN, -1)
+
     def start(self):
         self.ga.evolve(self.initialize_world)
 
@@ -56,6 +59,7 @@ class CursesApp(object):
         self.delay = o.app.render.delay
         self.draw = o.app.render.startup
         self.paused = False
+        self.stale_ticks = 0
 
     def initialize_evolver(self):
         # get all tiles
@@ -82,6 +86,9 @@ class CursesApp(object):
         self.colors = dict()
         self.peaters = list()
         self.populate_world(generation, population)
+        self.stale_ticks = 0
+        self.total_score = 0
+        self.king = None
         self.run()
         
     def populate_world(self, generation, population):
@@ -135,22 +142,19 @@ class CursesApp(object):
         self.buffer[coord] = tile
 
     def _render_world(self):
-        curses.init_pair(1, curses.COLOR_WHITE, -1)
-        curses.init_pair(2, -1, curses.COLOR_GREEN)
-        curses.init_pair(3, curses.COLOR_GREEN, -1)
-        if self.king and o.app.render.trail:
-            self.king.eraser = []
-            for y, x in (coord for coord, draw in self.king.trail.iteritems() if draw):
-                self.colors[(y, x)] = o.app.render.trailcolor
-#                self.king.trail[(y, x)] = False
         for coord, tile in self.buffer.items():
             y, x = coord
             self.screen.addch(y, x, ord(tile.char), curses.color_pair(1))
+        if self.king and o.app.render.trail:
+            for coord, draw in self.king.trail.iteritems():
+                if coord in self.buffer or draw:
+                    self.colors[coord] = o.app.render.trailcolor
+                    self.king.trail[coord] = False
         for coord, color in self.colors.items():
             y, x = coord
             self.screen.chgat(y, x, 1, curses.color_pair(color))
         if self.king:
-            self.screen.addch(self.king.y, self.king.x, ord(tile.char), curses.color_pair(2))
+            self.screen.addch(self.king.y, self.king.x, self.king.char, curses.color_pair(2))
         self.buffer = dict()
         self.colors = dict()
 
@@ -166,12 +170,17 @@ class CursesApp(object):
     def handle_keys(self):
         self.paused = False
         c = self.screen.getch()
+        if c == -1:
+            return True
         # drawmode
         if c == o.app.binds.drawmode:
             self.draw = not self.draw
             self.screen.clear()
         elif c == o.app.binds.trail:
-            o.app.render.trailmode = not o.app.render.trailmode
+            if o.app.render.trail:
+                o.app.render.trail = False
+            else:
+                o.app.render.trail = True
         # quit
         elif c == o.app.binds.quit:
             return False
@@ -185,7 +194,18 @@ class CursesApp(object):
                              self.delay - o.app.render.delaydiff)
         # pause
         elif c == o.app.binds.pause:
-            while self.screen.getch() == -1: pass
+            self.paused = not self.paused
+        return True
+
+    def handle_timeout(self):
+        new_total = sum(e.genome.simscore for e in self.peaters)
+        if new_total == self.total_score:
+            self.stale_ticks += 1
+        else:
+            self.stale_ticks = 0
+        self.total_score = new_total
+        if self.stale_ticks > o.ga.general.staleticks:
+            return False
         return True
 
     def handle_agents(self):
@@ -202,25 +222,14 @@ class CursesApp(object):
         return True
 
     def run(self):
-        self.king = None
-        total_score = 0
-        twf = 0 # ticks without fitness
         iterations = 0
         running = True
         if self.draw:
             self.screen.clear()
         while running:
             running = (self.handle_agents()
-                   and self.handle_keys())
-            new_total = sum(e.genome.simscore for e in self.peaters)
-            if new_total == total_score:
-                twf += 1
-            else:
-                twf = 0
-                total_score = new_total
-            if twf > o.ga.general.staleticks:
-                running = False
-
+                   and self.handle_keys()
+                   and self.handle_timeout())
             if self.draw:
                 self._render_world()
                 self.screen.clearok(0)
