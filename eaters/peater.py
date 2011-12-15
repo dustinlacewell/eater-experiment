@@ -5,7 +5,7 @@ import pdb
 
 from eaters import tiles
 from eaters.tiles.basic import *
-
+from eaters.options import o
 # ACTIONS
 WAIT = 0
 NORTH = 1
@@ -20,6 +20,8 @@ class Agent(tiles.Tile):
     def __init__(self, y, x, genome=None):
         self.y = y
         self.x = x
+        self.trail = {}
+        self.eraser = []
         self.heading = None
         self.genome = genome
         self.state = random.randint(0, len(self.genome) - 1)
@@ -97,9 +99,14 @@ class Agent(tiles.Tile):
             genome.append(state)
         return genome
 
+    def update_trail(self):
+        self.trail[(self.y, self.x)] = True
+
     def update(self, world, colors):
         neighbors = self.get_neighbors(world)
         valpair = self.genome[(self.state, neighbors)]
+
+        self.update_trail()
 
         self.state, action = valpair
         self.actions[action - 1](neighbors, world, colors)

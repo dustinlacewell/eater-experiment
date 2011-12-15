@@ -20,12 +20,17 @@ o['app.binds.quit'] = 32
 o['app.binds.delayup'] = 339
 o['app.binds.delaydown'] = 338
 o['app.binds.pause'] = ord('p')
+o['app.binds.tail'] = ord('t')
 # Rendering
 o['app.render.startup'] = True
 o['app.render.mindelay'] = 0.0
 o['app.render.maxdelay'] = 0.3
 o['app.render.delaydiff'] = 0.01
-o['app.render.delay'] = 0.05
+o['app.render.delay'] = 0.0
+o['app.render.trail'] = True
+o['app.render.trailsteps'] = 500
+o['app.render.trailcolor'] = 3
+
 # GA General
 o['ga.general.population'] = 5
 o['ga.general.generations'] = 100
@@ -49,6 +54,7 @@ class CursesApp(object):
         self.ga.evolve(self.initialize_world)
 
     def initialize_options(self, **kwargs):
+        self.king = None
         self.delay = o.app.render.delay
         self.draw = o.app.render.startup
         self.paused = False
@@ -133,6 +139,12 @@ class CursesApp(object):
     def _render_world(self):
         curses.init_pair(1, curses.COLOR_WHITE, -1)
         curses.init_pair(2, -1, curses.COLOR_GREEN)
+        curses.init_pair(3, curses.COLOR_GREEN, -1)
+        if self.king and o.app.render.trail:
+            self.king.eraser = []
+            for y, x in (coord for coord, draw in self.king.trail.iteritems() if draw):
+                self.colors[(y, x)] = o.app.render.trailcolor
+                self.king.trail[(y, x)] = False
         for coord, tile in self.buffer.items():
             y, x = coord
             self.screen.addch(y, x, ord(tile.char), curses.color_pair(1))
@@ -158,6 +170,8 @@ class CursesApp(object):
         if c == o.app.binds.drawmode:
             self.draw = not self.draw
             self.screen.clear()
+        elif c == o.app.binds.trail:
+            o.app.render.trailmode = not o.app.render.trailmode
         # quit
         elif c == o.app.binds.quit:
             return False
@@ -177,9 +191,18 @@ class CursesApp(object):
     def handle_agents(self):
         for p in self.peaters:
             p.update(self.world, self.colors)
+            if self.king is None or p.genome.simscore > self.king.genome.simscore:
+                if self.king:
+                    for y, x in self.king.trail:
+                        self.screen.chgat(y, x, 1, curses.color_pair(1))
+                        self.king.trail[y, x] = True
+                self.king = p
+                for coord in self.king.trail:
+                    self.king.trail[coord] = True
         return True
 
     def run(self):
+        self.king = None
         total_score = 0
         twf = 0 # ticks without fitness
         iterations = 0

@@ -43,7 +43,6 @@ class InnerBag(object):
             super(InnerBag, self).__getattribute__(name)
         except AttributeError:
             if super(InnerBag, self).__getattribute__('locked'):
-                set_trace()
                 return InnerBag()
             raise AttributeError()
 
