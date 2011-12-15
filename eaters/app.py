@@ -28,6 +28,8 @@ o['app.render.delaydiff'] = 0.01
 o['app.render.delay'] = 0.0
 o['app.render.trail'] = True
 o['app.render.trailcolor'] = 3
+o['app.render.king'] = True
+o['app.render.kingcolor'] = 2
 # GA General
 o['ga.general.population'] = 5
 o['ga.general.generations'] = 1000
@@ -141,31 +143,40 @@ class CursesApp(object):
     def world_changed(self, coord, tile):
         self.buffer[coord] = tile
 
-    def _render_world(self):
+    def _render_buffer(self):
         for coord, tile in self.buffer.items():
             y, x = coord
             self.screen.addch(y, x, ord(tile.char), curses.color_pair(1))
+
+    def _render_trail(self):
         if self.king and o.app.render.trail:
             for coord, draw in self.king.trail.iteritems():
                 if coord in self.buffer or draw:
                     self.colors[coord] = o.app.render.trailcolor
                     self.king.trail[coord] = False
+
+    def _render_king(self):
+        if self.king:
+            coord = self.king.y, self.king.x
+            self.colors[coord] = o.app.render.kingcolor
+
+    def _render_colors(self):
         for coord, color in self.colors.items():
             y, x = coord
             self.screen.chgat(y, x, 1, curses.color_pair(color))
-        if self.king:
-            self.screen.addch(self.king.y, self.king.x, self.king.char, curses.color_pair(2))
+
+    def _reset_buffers(self):
         self.buffer = dict()
         self.colors = dict()
 
-    def _render_world_old(self):
-        height, width = self.screen.getmaxyx()
-        for y in range(height - 1):
-            for x in range(width):
-                tile = self.world.get((y, x), Space())
-                self.screen.move(y, x)
-                self.screen.addch(ord(tile.char))
-
+    def render(self):
+        self._render_buffer()
+        if o.app.render.trail:
+            self._render_trail()
+        if o.app.render.king:
+            self._render_king()
+        self._render_colors()
+        self._reset_buffers()
 
     def handle_keys(self):
         self.paused = False
@@ -231,7 +242,7 @@ class CursesApp(object):
                    and self.handle_keys()
                    and self.handle_timeout())
             if self.draw:
-                self._render_world()
+                self.render()
                 self.screen.clearok(0)
                 self.screen.refresh()
                 sleep(self.delay)
