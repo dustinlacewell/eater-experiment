@@ -7,38 +7,68 @@ import curses
 from pyevolve.GSimpleGA import GSimpleGA
 from pyevolve import Selectors
 
+from eaters.options import o
 from eaters import tiles
 from eaters.tiles.basic import *
 from eaters.peater import Peater
 from eaters.hookabledict import HookableDict
 from eaters.genome import *
 
+# Keybindings
+o['app.binds.drawmode'] = 9
+o['app.binds.quit'] = 32
+o['app.binds.delayup'] = 339
+o['app.binds.delaydown'] = 338
+o['app.binds.pause'] = ord('p')
+# Rendering
+o['app.render.startup'] = True
+o['app.render.mindelay'] = 0.0
+o['app.render.maxdelay'] = 0.3
+o['app.render.delaydiff'] = 0.01
+o['app.render.delay'] = 0.05
+# GA General
+o['ga.general.population'] = 5
+o['ga.general.generations'] = 100
+o['ga.general.staleticks'] = 350
+# GA Evaluation
+o['ga.evaluator.elites'] = 2
+o['ga.evaluator.minimax'] = 'maximize'
+# GA Crossover
+o['ga.crossover.rate'] = 0.9
+o['ga.crossover.elites'] = 2
+o['ga.mutation.rate'] = 0.1
 
 class CursesApp(object):
 
-    def __init__(self, screen, **kwargs):
+    def __init__(self, screen):
         self._start_screen(screen)
-        self.initialize_options(**kwargs)
+        self.initialize_options()
         self.initialize_evolver()
 
     def start(self):
         self.ga.evolve(self.initialize_world)
 
     def initialize_options(self, **kwargs):
-        self.delay = kwargs.get('delay', 0.0)
-        self.draw = kwargs.get('draw', True)
+        self.delay = o.app.render.delay
+        self.draw = o.app.render.startup
         self.paused = False
 
     def initialize_evolver(self):
+        # get all tiles
         keys = list(itertools.product(tiles.all(), repeat=4))
-        sample = GMap(keys, Peater.choices, 8)
+        # create sample with all possible genome keys
+        sample = GMap(keys, Peater.choices, nstates=8)
         sample.evaluator.set = GMapEvaluator
+        # initialize evolver
         ga = GSimulationGA(sample)
-        ga.setPopulationSize(5)
-        ga.setGenerations(25000)
-        ga.setMutationRate(.1)
+        ga.setPopulationSize(o.ga.general.population)
+        ga.setGenerations(o.ga.general.generations)
+        ga.setCrossoverRate(o.ga.crossover.rate)
+        ga.setMutationRate(o.ga.mutation.rate)
+        ga.setElitismReplacement(o.ga.crossover.elites)
+        ga.setElitism(o.ga.crossover.elites > 0)
         ga.selector.set(Selectors.GTournamentSelector)
-        ga.minimax = Consts.minimaxType['maximize']
+        ga.minimax = Consts.minimaxType[o.ga.evaluator.minimax]
         self.ga = ga
 
     def initialize_world(self, generation, population):
@@ -120,32 +150,28 @@ class CursesApp(object):
                 self.screen.move(y, x)
                 self.screen.addch(ord(tile.char))
 
-    def handle_cache(self):
-        if self.buffer == self.cache:
-            return False
-        else:
-            self.cache_dt += 1
-        if self.cache_dt == 350:
-            self.cache_dt = 0
-            self.cache = self.buffer
-        return True
 
     def handle_keys(self):
         self.paused = False
         c = self.screen.getch()
-        if c == 9:
+        # drawmode
+        if c == o.app.binds.drawmode:
             self.draw = not self.draw
             self.screen.clear()
-        elif c == 32:
+        # quit
+        elif c == o.app.binds.quit:
             return False
-        elif c == 339:
-            self.delay = min(2.0, self.delay + .001)
-        elif c == 338:
-            self.delay = max(0.0, self.delay - .001)
-        elif c == ord('p'):
+        # delay up
+        elif c == o.app.binds.delayup:
+            self.delay = min(o.app.render.maxdelay, 
+                             self.delay + o.app.render.delaydiff)
+        # delay down
+        elif c == o.app.binds.delaydown:
+            self.delay = max(o.app.render.mindelay, 
+                             self.delay - o.app.render.delaydiff)
+        # pause
+        elif c == o.app.binds.pause:
             while self.screen.getch() == -1: pass
-        elif c != -1:
-            raise Exception(str(c))
         return True
 
     def handle_agents(self):
@@ -155,10 +181,9 @@ class CursesApp(object):
 
     def run(self):
         total_score = 0
-        twf = 0
+        twf = 0 # ticks without fitness
         iterations = 0
         running = True
-        cache = False
         if self.draw:
             self.screen.clear()
         while running:
@@ -170,7 +195,7 @@ class CursesApp(object):
             else:
                 twf = 0
                 total_score = new_total
-            if twf > 500:
+            if twf > o.ga.general.staleticks:
                 running = False
 
             if self.draw:

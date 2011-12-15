@@ -1,4 +1,4 @@
-import pdb
+from pudb import set_trace
 import random
 import logging
 from time import time
@@ -9,6 +9,8 @@ from pyevolve.GenomeBase import GenomeBase
 from pyevolve.GPopulation  import GPopulation
 from pyevolve import Util, Consts
 
+from eaters.options import o
+
 def GMapInitializator(genome, **args):
     keys = genome.keys
     nstates = genome.nstates
@@ -17,17 +19,20 @@ def GMapInitializator(genome, **args):
         for key in keys:
             genome.genome[state][key] = genome.choose()
 
-def GMapMutator(genome, **args):
-    if args["pmut"] <= 0.0: return 0
+o['ga.mutator.pmut'] = 0.0
+
+def GMapMutator(genome, **kwargs):
+    pmut = kwargs.get('pmut', o.ga.mutator.pmut)
+    if pmut <= 0.0: return 0
     nkeys = len(genome.keys)
     nstates = genome.nstates
-    mutations = args["pmut"] * nkeys * nstates
+    mutations = pmut * nkeys * nstates
 
     if mutations < 1.0:
         mutation = 0
         for state in xrange(nstates):
             for key in genome.keys:
-                if Util.randomFlipCoin(args["pmut"]):
+                if Util.randomFlipCoin(pmut):
                     genome[(state, key)] = genome.choose()
                     mutations += 1
     else:
@@ -132,13 +137,16 @@ class GMapBase:
 
 
 
+o['ga.genomes.gmap.nstates'] = 1
+
 class GMap(GenomeBase, GMapBase):
     evaluator = None
     initializator = None
     mutator = None
     crossover = None
 
-    def __init__(self, keys, values, nstates=1, cloning=False):
+    def __init__(self, keys, values, cloning=False, **kwargs):
+        nstates = kwargs.get('nstates', o.ga.genomes.gmap.nstates)
         GenomeBase.__init__(self)
         GMapBase.__init__(self, keys, values, nstates)
         if not cloning:
@@ -155,7 +163,7 @@ class GMap(GenomeBase, GMapBase):
         GMapBase.copy(self, g)
 
     def clone(self):
-        newobj = GMap(self.keys, self.values, self.nstates)
+        newobj = GMap(self.keys, self.values, nstates=self.nstates)
         self.copy(newobj)
         return newobj
 
