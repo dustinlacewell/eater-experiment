@@ -23,9 +23,9 @@ o['app.binds.tail'] = ord('t')
 # Rendering
 o['app.render.startup'] = True
 o['app.render.mindelay'] = 0.0
-o['app.render.maxdelay'] = 0.3
+o['app.render.maxdelay'] = 0.2
 o['app.render.delaydiff'] = 0.01
-o['app.render.delay'] = 0.0
+o['app.render.delay'] = 0.1
 o['app.render.trail'] = True
 o['app.render.trailcolor'] = 3
 o['app.render.king'] = True
