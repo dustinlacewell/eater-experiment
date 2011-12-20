@@ -1,17 +1,21 @@
+import pudb
 import itertools
-from time import sleep
 import random
 import curses 
+import _curses
+import urwid
 
-from pyevolve.GSimpleGA import GSimpleGA
 from pyevolve import Selectors
 
-from eaters.options import o
+from eaters.genome import *
+from eaters.widgets import *
+from eaters.peater import Peater
 from eaters import tiles
 from eaters.tiles.basic import *
-from eaters.peater import Peater
 from eaters.hookabledict import HookableDict
-from eaters.genome import *
+from eaters.options import o
+
+import time
 
 # Keybindings
 o['app.binds.drawmode'] = 9
@@ -25,36 +29,55 @@ o['app.render.startup'] = True
 o['app.render.mindelay'] = 0.0
 o['app.render.maxdelay'] = 0.2
 o['app.render.delaydiff'] = 0.01
-o['app.render.delay'] = 0.1
+o['app.render.delay'] = 0.0
 o['app.render.trail'] = True
 o['app.render.trailcolor'] = 3
 o['app.render.king'] = True
 o['app.render.kingcolor'] = 2
 # GA General
-o['ga.general.population'] = 5
+o['ga.general.population'] = 40
 o['ga.general.generations'] = 1000
 o['ga.general.staleticks'] = 350
 # GA Evaluation
-o['ga.evaluator.elites'] = 2
+o['ga.evaluator.elites'] = 0
 o['ga.evaluator.minimax'] = 'maximize'
 # GA Crossover
 o['ga.crossover.rate'] = 0.9
 o['ga.crossover.elites'] = 2
 o['ga.mutation.rate'] = 0.1
 
+
 class CursesApp(object):
 
-    def __init__(self, screen):
-        self._start_screen(screen)
+    def __init__(self):
+        self.palette = [('I say', 'default,bold', 'default', 'bold'),]
         self.initialize_options()
+        self.initialize_screen()
         self.initialize_evolver()
-
-        curses.init_pair(1, curses.COLOR_WHITE, -1)
-        curses.init_pair(2, -1, curses.COLOR_GREEN)
-        curses.init_pair(3, curses.COLOR_GREEN, -1)
+        self.run_iter = self.run()
 
     def start(self):
-        self.ga.evolve(self.initialize_world)
+        try:
+            self.screen.start()
+            self.widget = EaterScreenWidget(self)
+            self.loop = CursesBufferLoop(self.widget, self.palette,
+                                         unhandled_input=self.handle_input,
+                                         screen=self.screen)
+            self.loop.set_alarm_in(0.0, self.loop_cb, None)
+            self.loop.run()
+        finally:
+            self.screen.stop()
+
+    def handle_input(self, input):
+        if input == 'enter':
+            command = self.widget.get_command()
+            if command == "skip":
+                self.running = False
+            if command == "top":
+                self.widget.log("King fitness: %d" % self.king.genome.simscore)
+            if command == "quit":
+                raise urwid.ExitMainLoop()
+
 
     def initialize_options(self, **kwargs):
         self.king = None
@@ -62,6 +85,11 @@ class CursesApp(object):
         self.draw = o.app.render.startup
         self.paused = False
         self.stale_ticks = 0
+
+    def initialize_screen(self):
+        self.screen = BufferScreen()
+        self.buffer = self.screen.chbuf('main')
+        self.colors = self.screen.cobuf('main')
 
     def initialize_evolver(self):
         # get all tiles
@@ -84,25 +112,28 @@ class CursesApp(object):
     def initialize_world(self, generation, population):
         self.world = HookableDict()
         self.world.hook('setitem', self.world_changed)
-        self.buffer = dict()
-        self.colors = dict()
+        self.screen.clear_all_bufs()
+        self.screen.dirty = True
+        self.screen.clear()
         self.peaters = list()
         self.populate_world(generation, population)
         self.stale_ticks = 0
         self.total_score = 0
         self.king = None
-        self.run()
         
     def populate_world(self, generation, population):
-        height, width = self.screen.getmaxyx()
-        for y in range(height - 1):
+        width, height = self.widget.buffer.size
+        char = 5
+        for y in range(height):
             for x in range(width):
                 tile = None
                 if x == 0 or x == width - 1:
                     tile = Wall()
-                elif y == 0 or y == height - 2:
+                    char += 1
+                elif y == 0 or y == height - 1:
                     tile = Wall()
-                elif random.randint(0, 20) == 0:
+                    char += 1
+                elif random.randint(0, 5) == 0:
                     tile = Plant()
                 if tile:
                     self.world[(y, x)] = tile
@@ -111,102 +142,23 @@ class CursesApp(object):
             y = random.randint(2, height - 4)
             x = random.randint(2, width - 4)
             self.peaters.append(Peater(y, x, genome=individual))
-        self.buffer = dict()
+        self.buffer.clear()
         for key, val in self.world.items():
             self.buffer[key] = val
-
-    def _start_screen(self, screen):
-        self.screen = screen
-        curses.start_color()
-        curses.use_default_colors()
-        self.screen.nodelay(1)
-        # don't echo keypresses
-        curses.noecho()
-        # handle keypresses immediately
-        curses.cbreak()
-        # enable color rendering
-        curses.start_color()
-        # hide the cursor
-        self.orig_curs_mode = curses.curs_set(0)
-        # handle special characters
-        self.screen.keypad(1)
-
-    def _stop_screen(self):
-        self.screen.clear()
-        curses.curs_set(self.orig_curs_mode)
-        self.screen.keypad(0)
-        curses.nocbreak()
-        curses.echo()
-        curses.endwin()
-        self.screen = None
 
     def world_changed(self, coord, tile):
         self.buffer[coord] = tile
 
-    def _render_buffer(self):
-        for coord, tile in self.buffer.items():
-            y, x = coord
-            self.screen.addch(y, x, ord(tile.char), curses.color_pair(1))
-
     def _render_trail(self):
         if self.king and o.app.render.trail:
             for coord, draw in self.king.trail.iteritems():
-                if coord in self.buffer or draw:
-                    self.colors[coord] = o.app.render.trailcolor
-                    self.king.trail[coord] = False
+                self.colors[coord] = o.app.render.trailcolor
+                self.king.trail[coord] = False
 
     def _render_king(self):
         if self.king:
             coord = self.king.y, self.king.x
             self.colors[coord] = o.app.render.kingcolor
-
-    def _render_colors(self):
-        for coord, color in self.colors.items():
-            y, x = coord
-            self.screen.chgat(y, x, 1, curses.color_pair(color))
-
-    def _reset_buffers(self):
-        self.buffer = dict()
-        self.colors = dict()
-
-    def render(self):
-        self._render_buffer()
-        if o.app.render.trail:
-            self._render_trail()
-        if o.app.render.king:
-            self._render_king()
-        self._render_colors()
-        self._reset_buffers()
-
-    def handle_keys(self):
-        self.paused = False
-        c = self.screen.getch()
-        if c == -1:
-            return True
-        # drawmode
-        if c == o.app.binds.drawmode:
-            self.draw = not self.draw
-            self.screen.clear()
-        elif c == o.app.binds.trail:
-            if o.app.render.trail:
-                o.app.render.trail = False
-            else:
-                o.app.render.trail = True
-        # quit
-        elif c == o.app.binds.quit:
-            return False
-        # delay up
-        elif c == o.app.binds.delayup:
-            self.delay = min(o.app.render.maxdelay, 
-                             self.delay + o.app.render.delaydiff)
-        # delay down
-        elif c == o.app.binds.delaydown:
-            self.delay = max(o.app.render.mindelay, 
-                             self.delay - o.app.render.delaydiff)
-        # pause
-        elif c == o.app.binds.pause:
-            self.paused = not self.paused
-        return True
 
     def handle_timeout(self):
         new_total = sum(e.genome.simscore for e in self.peaters)
@@ -220,39 +172,41 @@ class CursesApp(object):
         return True
 
     def handle_agents(self):
+        curses.init_pair(1, curses.COLOR_WHITE, -1)
         for p in self.peaters:
             p.update(self.world, self.colors)
+        for p in self.peaters:
             if self.king is None or p.genome.simscore > self.king.genome.simscore:
                 if self.king:
                     for y, x in self.king.trail:
-                        self.screen.chgat(y, x, 1, curses.color_pair(1))
+                        self.colors[(y, x)] = 1
                         self.king.trail[y, x] = True
                 self.king = p
                 for coord in self.king.trail:
                     self.king.trail[coord] = True
+        self._render_trail()
+        self._render_king()
         return True
 
+    def loop_cb(self, loop, user_data=None):
+        self.run_iter.next()
+
     def run(self):
-        iterations = 0
-        running = True
-        if self.draw:
-            self.screen.clear()
-        while running:
-            running = (self.handle_agents()
-                   and self.handle_keys()
-                   and self.handle_timeout())
-            if self.draw:
-                self.render()
-                self.screen.clearok(0)
-                self.screen.refresh()
-                sleep(self.delay)
-            iterations += 1
-        if not self.draw:
-            self.screen.move(0, 0)
-            gen = self.ga.currentGeneration
-            msg = self.ga.internalPop.printStats()
-            self.screen.addstr(0, 0, "%s (%s): %s" % (gen, self.delay, msg))
-            self.screen.clearok(1)
-            self.screen.refresh()
-        
+        for gen, pop in self.ga.evolve():
+            self.initialize_world(gen, pop)
+            self.widget.log("Generation: %d" % gen)
+            iterations = 0
+            self.running = True
+            while self.running:
+                if iterations % 40 == 0:
+                    self.loop.screen.dirty = True
+
+                self.running = (self.handle_agents()
+                           and self.handle_timeout())
+                iterations += 1
+                self.loop.set_alarm_in(0.001, self.loop_cb)
+                yield iterations
+            self.loop.set_alarm_in(0.001, self.loop_cb)
+            yield iterations
+        raise urwid.ExitMainLoop()
             

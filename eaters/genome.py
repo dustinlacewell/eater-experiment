@@ -166,7 +166,7 @@ class GMap(GenomeBase, GMapBase):
 
 
 class GSimulationGA(GSimpleGA):
-   def evolve(self, simulation_callback, freq_stats=0):
+   def evolve(self, freq_stats=0):
       """ Do all the generations until the termination criteria, accepts
       the freq_stats (default is 0) to dump statistics at n-generation
 
@@ -183,7 +183,6 @@ class GSimulationGA(GSimpleGA):
 
       """
 
-      self.simulation_callback = simulation_callback
       stopFlagCallback = False
       stopFlagTerminationCriteria = False
 
@@ -200,7 +199,7 @@ class GSimulationGA(GSimpleGA):
             self.__gp_catch_functions(gp_function_prefix)
 
       self.initialize()
-      self.simulation_callback(self.currentGeneration, self.internalPop)
+      yield (self.currentGeneration, self.internalPop)
       self.internalPop.evaluate()
       self.internalPop.sort()
       logging.debug("Starting loop over evolutionary algorithm.")
@@ -272,7 +271,10 @@ class GSimulationGA(GSimpleGA):
                         print
                         code.interact(interact_banner, local=session_locals)
 
-            if self.step(): break #exit if the number of generations is equal to the max. number of gens.
+            try:
+                yield self.step()
+            except StopIteration:
+                raise StopIteration('Done.')
 
       except KeyboardInterrupt:
          logging.debug("CTRL-C detected, finishing evolution.")
@@ -293,8 +295,6 @@ class GSimulationGA(GSimpleGA):
          if freq_stats: print "Stopping the migration adapter... ",
          self.migrationAdapter.stop()
          if freq_stats: print "done !"
-
-      return self.bestIndividual()
 
    def step(self):
       """ Just do one step in evolution, one generation """
@@ -346,7 +346,6 @@ class GSimulationGA(GSimpleGA):
          newPop.internalPop.append(sister)
 
       logging.debug("Evaluating the new created population.")
-      self.simulation_callback(self.currentGeneration, newPop)
       newPop.evaluate()
 
       #Niching methods- Petrowski's clearing
@@ -357,11 +356,13 @@ class GSimulationGA(GSimpleGA):
          if self.getMinimax() == Consts.minimaxType["maximize"]:
             for i in xrange(self.nElitismReplacement):
                if self.internalPop.bestRaw(i).score > newPop.bestRaw(i).score:
-                  newPop[len(newPop)-1-i] = self.internalPop.bestRaw(i)
+                   self.internalPop.bestRaw(i).simscore = 0
+                   newPop[len(newPop)-1-i] = self.internalPop.bestRaw(i)
          elif self.getMinimax() == Consts.minimaxType["minimize"]:
             for i in xrange(self.nElitismReplacement):
                if self.internalPop.bestRaw(i).score < newPop.bestRaw(i).score:
-                  newPop[len(newPop)-1-i] = self.internalPop.bestRaw(i)
+                   self.internalPop.bestRaw(i).simscore = 0
+                   newPop[len(newPop)-1-i] = self.internalPop.bestRaw(i)
 
       self.internalPop = newPop
       self.internalPop.sort()
@@ -370,6 +371,8 @@ class GSimulationGA(GSimpleGA):
 
       self.currentGeneration += 1
 
-      return (self.currentGeneration == self.nGenerations)
+      if self.currentGeneration == self.nGenerations:
+          raise StopIteration()
+      return (self.currentGeneration, self.internalPop)
    
     
