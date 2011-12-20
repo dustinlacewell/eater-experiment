@@ -65,18 +65,23 @@ class CursesApp(object):
                                          screen=self.screen)
             self.loop.set_alarm_in(0.0, self.loop_cb, None)
             self.loop.run()
+        except KeyboardInterrupt:
+            pass
         finally:
             self.screen.stop()
 
     def handle_input(self, input):
-        if input == 'enter':
-            command = self.widget.get_command()
-            if command == "skip":
-                self.running = False
-            if command == "top":
-                self.widget.log("King fitness: %d" % self.king.genome.simscore)
-            if command == "quit":
-                raise urwid.ExitMainLoop()
+        if input == 'ctrl c':
+            raise urwid.ExitMainLoop()
+            
+
+    def handle_command(self, command):
+        if command == "skip":
+            self.running = False
+        if command == "top":
+            self.widget.log("King fitness: %d" % self.king.genome.simscore)
+        if command == "quit":
+            raise urwid.ExitMainLoop()
 
 
     def initialize_options(self, **kwargs):

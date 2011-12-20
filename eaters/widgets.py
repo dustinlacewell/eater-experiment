@@ -1,12 +1,13 @@
 import pudb
 import heapq, time, random
 import curses, _curses, urwid
+from curses import ascii
 
 from urwid.display_common import UNPRINTABLE_TRANS_TABLE, AttrSpec
 from urwid.main_loop import MainLoop
 from urwid.curses_display import Screen
 from urwid.compat import bytes, chr2, B, bytes3, PYTHON3
-
+from urwid.util import move_next_char, move_prev_char
 class BufferScreen(Screen):
     def __init__(self):
         super(BufferScreen, self).__init__()
@@ -285,29 +286,92 @@ class EaterScreenWidget(urwid.WidgetWrap):
         display_widget = urwid.Pile([self.buffer, self.panel])
         urwid.WidgetWrap.__init__(self, display_widget)
 
+class CommandEdit(urwid.Edit):
+    def __init__(self, comcb, *args, **kwargs):
+        super(CommandEdit, self).__init__(*args, **kwargs)
+        self.comcb = comcb
+        self.history = []
+        self.pointer = -1
+        self.maxcol = 0
+
+    def _get_input(self):
+        return self.get_edit_text()
+    def _set_input(self, val):
+        return self.set_edit_text(val)
+    input = property(_get_input, _set_input)
+
+    def update_input(self, size):
+        x, y = self.get_cursor_coords(size)
+        if self.pointer >= 0:
+            self.input = self.history[self.pointer]
+        else:
+            self.input = ''
+        self.move_cursor_to_coords(size, 'right', y)
+
+    def keypress(self, size, key):
+        cx, cy = self.get_cursor_coords(size)
+        if key=="enter" and self.input:
+            self.comcb(self.input)
+            self.history.insert(0, self.input)
+            self.input = ''
+            self.pointer = -1
+        elif key in ('ctrl p', 'up'):
+            if self.pointer <= len(self.history) - 2:
+                self.pointer += 1
+                self.pointer = min(len(self.history) - 1, self.pointer)
+                self.update_input(size)
+        elif key in ('ctrl n', 'down'):
+            if self.pointer >= 0:
+                self.pointer -= 1
+                self.pointer = max(-1, self.pointer)
+                self.update_input(size)
+        elif key in ('ctrl e', 'end'):
+            self.move_cursor_to_coords(size, 'right', cy)
+        elif key in ('ctrl a', 'home'):
+            self.move_cursor_to_coords(size, 'left', cy)
+        elif key in ('ctrl f', 'right'):
+            if self.edit_pos < len(self.input):
+                p = move_next_char(self.input, self.edit_pos, len(self.input))
+                self.set_edit_pos(p)
+        elif key in ('ctrl b', 'right'):
+            if self.edit_pos > 0:
+                p = move_prev_char(self.input, 0, self.edit_pos)
+                self.set_edit_pos(p)
+        else:
+            super(CommandEdit, self).keypress(size, key)
+
+class EaterConsoleWidget(urwid.WidgetWrap):
+    def __init__(self, app, comcb):
+        self._log = urwid.Text("Welcome to the Great Eater Experiment!\n")
+        self._input = CommandEdit(comcb, ">")
+        self.display = urwid.ListBox(urwid.SimpleListWalker([
+                    self._log, self._input]))
+        urwid.WidgetWrap.__init__(self, self.display)
+
+    def _get_text(self):
+        return self._log.get_text()[0]
+
+    def _set_text(self, val):
+        self._log.set_text(val)
+    text = property(_get_text, _set_text)
+
+    def write(self, string):
+        self.text = self.text + string
+
+    def writelines(self, strings):
+        for string in strings:
+            self.write(string + "\n")
+
 class EaterScreenWidget(urwid.WidgetWrap):
     def __init__(self, app):
         fourths = app.screen.s.getmaxyx()[1] / 4
         self.options = []
         self.buffer = BufferFill(chr(0))
-        self._text = urwid.Text("Starting...\n")
-        self._edit = urwid.Edit(">")
-        self.panel = ('fixed', 8, urwid.ListBox(urwid.SimpleListWalker([self._text, self._edit])))
-
+        self.console = EaterConsoleWidget(app, app.handle_command)
+        self.panel = ('fixed', 8, self.console)
         display_widget = urwid.Pile([self.buffer, self.panel])
         urwid.WidgetWrap.__init__(self, display_widget)
 
-    def _get_text(self):
-        return self._text.get_text()[0]
+    def log(self, string):
+        self.console.write(string + "\n")
 
-    def _set_text(self, val):
-        self._text.set_text(val)
-    text = property(_get_text, _set_text)
-
-    def log(self, line):
-        self.text = self.text + line + "\n"
-
-    def get_command(self):
-        txt = self._edit.get_edit_text()
-        self._edit.set_edit_text('')
-        return txt
