@@ -37,7 +37,7 @@ o['app.render.kingcolor'] = 2
 # GA General
 o['ga.general.population'] = 40
 o['ga.general.generations'] = 1000
-o['ga.general.staleticks'] = 350
+o['ga.general.staleticks'] = 150
 # GA Evaluation
 o['ga.evaluator.elites'] = 0
 o['ga.evaluator.minimax'] = 'maximize'
@@ -189,23 +189,28 @@ class CursesApp(object):
                 self.king = p
                 for coord in self.king.trail:
                     self.king.trail[coord] = True
-        self._render_trail()
-        self._render_king()
+        # self._render_trail()
+        # self._render_king()
         return True
 
     def loop_cb(self, loop, user_data=None):
         self.run_iter.next()
 
+    def dirty(self):
+        self.loop.screen.dirty = True
+
+    def messy(self):
+        self.screen.s.clearok(1)
+        self.dirty()
+
     def run(self):
         for gen, pop in self.ga.evolve():
             self.initialize_world(gen, pop)
-            self.widget.log("Generation: %d" % gen)
             iterations = 0
             self.running = True
             while self.running:
-                if iterations % 40 == 0:
-                    self.loop.screen.dirty = True
-
+                if iterations % 10:
+                    self.dirty()
                 self.running = (self.handle_agents()
                            and self.handle_timeout())
                 iterations += 1
