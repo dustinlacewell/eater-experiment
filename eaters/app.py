@@ -31,18 +31,22 @@ o['app.render.maxdelay'] = 0.2
 o['app.render.delaydiff'] = 0.01
 o['app.render.delay'] = 0.0
 o['app.render.trail'] = True
-o['app.render.trailcolor'] = 3
+o['app.render.trailcolor'] = 4
 o['app.render.king'] = True
-o['app.render.kingcolor'] = 2
+o['app.render.kingcolor'] = 3
+o['app.render.eaters'] = True
+o['app.render.eatercolor'] = 2
+
 # GA General
-o['ga.general.population'] = 40
+o['ga.general.population'] = 15
 o['ga.general.generations'] = 1000
-o['ga.general.staleticks'] = 150
+o['ga.general.staleticks'] = 300
 # GA Evaluation
-o['ga.evaluator.elites'] = 0
-o['ga.evaluator.minimax'] = 'maximize'
+o['ga.evaluator.elites'] = 2
+o['ga.evaluator.minimax'] = 'minimize'
 # GA Crossover
-o['ga.crossover.rate'] = 0.9
+o['ga.crossover.rate'] = .9
+o['ga.crossover.rate2'] = .1
 o['ga.crossover.elites'] = 2
 o['ga.mutation.rate'] = 0.1
 
@@ -100,7 +104,7 @@ class CursesApp(object):
         # get all tiles
         keys = list(itertools.product(tiles.all(), repeat=4))
         # create sample with all possible genome keys
-        sample = GMap(keys, Peater.choices, nstates=8)
+        sample = GMap(keys, Peater.choices, nstates=16)
         sample.evaluator.set = GMapEvaluator
         # initialize evolver
         ga = GSimulationGA(sample)
@@ -108,8 +112,9 @@ class CursesApp(object):
         ga.setGenerations(o.ga.general.generations)
         ga.setCrossoverRate(o.ga.crossover.rate)
         ga.setMutationRate(o.ga.mutation.rate)
-        ga.setElitismReplacement(o.ga.crossover.elites)
-        ga.setElitism(o.ga.crossover.elites > 0)
+        # if o.ga.crossover.elites:
+        #     ga.setElitismReplacement(o.ga.crossover.elites)
+        #     ga.setElitism(o.ga.crossover.elites > 0)
         ga.selector.set(Selectors.GTournamentSelector)
         ga.minimax = Consts.minimaxType[o.ga.evaluator.minimax]
         self.ga = ga
@@ -118,7 +123,6 @@ class CursesApp(object):
         self.world = HookableDict()
         self.world.hook('setitem', self.world_changed)
         self.screen.clear_all_bufs()
-        self.screen.dirty = True
         self.screen.clear()
         self.peaters = list()
         self.populate_world(generation, population)
@@ -138,8 +142,11 @@ class CursesApp(object):
                 elif y == 0 or y == height - 1:
                     tile = Wall()
                     char += 1
-                elif random.randint(0, 5) == 0:
-                    tile = Plant()
+                elif (x > 6 and y > 6 and
+                      x < width - 6 and
+                      y < height - 6):
+                    if random.randint(0, 5) == 0:
+                        tile = Plant()
                 if tile:
                     self.world[(y, x)] = tile
 
@@ -165,23 +172,29 @@ class CursesApp(object):
             coord = self.king.y, self.king.x
             self.colors[coord] = o.app.render.kingcolor
 
+    def _render_eaters(self):
+        if o.app.render.eaters:
+            for e in self.peaters:
+                self.colors[(e.y, e.x)] = o.app.render.eatercolor
+
     def handle_timeout(self):
-        new_total = sum(e.genome.simscore for e in self.peaters)
-        if new_total == self.total_score:
+        scored = False
+        for p in self.peaters:
+            if p.scored:
+                scored = True
+        if not scored:
             self.stale_ticks += 1
         else:
             self.stale_ticks = 0
-        self.total_score = new_total
         if self.stale_ticks > o.ga.general.staleticks:
             return False
         return True
 
     def handle_agents(self):
-        curses.init_pair(1, curses.COLOR_WHITE, -1)
         for p in self.peaters:
             p.update(self.world, self.colors)
         for p in self.peaters:
-            if self.king is None or p.genome.simscore > self.king.genome.simscore:
+            if self.king is None or p.genome.simscore < self.king.genome.simscore:
                 if self.king:
                     for y, x in self.king.trail:
                         self.colors[(y, x)] = 1
@@ -189,30 +202,36 @@ class CursesApp(object):
                 self.king = p
                 for coord in self.king.trail:
                     self.king.trail[coord] = True
-        # self._render_trail()
-        # self._render_king()
         return True
 
     def loop_cb(self, loop, user_data=None):
         self.run_iter.next()
 
     def dirty(self):
-        self.loop.screen.dirty = True
+        self.screen.dirty = True
 
     def messy(self):
-        self.screen.s.clearok(1)
-        self.dirty()
+        self.screen.messy = True
+
+    def clear(self):
+        self.screen.doclear = True
 
     def run(self):
         for gen, pop in self.ga.evolve():
+            self.generation = gen
             self.initialize_world(gen, pop)
             iterations = 0
             self.running = True
             while self.running:
-                if iterations % 10:
-                    self.dirty()
                 self.running = (self.handle_agents()
-                           and self.handle_timeout())
+                                and self.handle_timeout())
+                if (self.screen.ch_bufs['main'] or iterations % 10 == 0) and self.draw:
+                    self._render_trail()
+                    self._render_eaters()
+                    self._render_king()
+                    self.screen.messy = True
+                if iterations % 10 == 0:
+                    self.screen.dirty = True
                 iterations += 1
                 self.loop.set_alarm_in(0.001, self.loop_cb)
                 yield iterations

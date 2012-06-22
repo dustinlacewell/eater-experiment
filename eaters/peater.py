@@ -24,6 +24,7 @@ class Agent(tiles.Tile):
         self.heading = None
         self.genome = genome
         self.state = random.randint(0, len(self.genome) - 1)
+        self.scored = False
         self.actions = (self.do_north,
                         self.do_east,
                         self.do_south,
@@ -102,13 +103,19 @@ class Agent(tiles.Tile):
         self.trail[(self.y, self.x)] = True
 
     def update(self, world, colors):
+        self.scored = False
         neighbors = self.get_neighbors(world)
         valpair = self.genome[(self.state, neighbors)]
 
         self.update_trail()
+        colors[(self.y, self.x)] = 1
 
         self.state, action = valpair
         self.actions[action - 1](neighbors, world, colors)
+        
+    def do_score(self):
+        self.genome.simscore -= 1
+        self.scored = True
 
     def do_wait(self, world):
         pass
@@ -145,34 +152,50 @@ class Peater(Agent):
             world[(self.y, self.x)] = Space()
             self.y -= 1
             world[(self.y, self.x)] = self
-        if neighbors[0] == Plant():
-            self.genome.simscore += 1
-            colors[(self.y, self.x)] = 2
+            if neighbors[0] == Plant():
+                self.do_score()
+                colors[(self.y, self.x)] = 2
+        elif neighbors[0] == Wall:
+            self.genome.simscore += .1
+        else:
+            self.genome.simscore += .01
 
     def do_east(self, neighbors, world, colors):
         if neighbors[1] not in [Wall, Peater]:
             world[(self.y, self.x)] = Space()
             self.x += 1
             world[(self.y, self.x)] = self
-        if neighbors[1] == Plant():
-            self.genome.simscore += 1
-            colors[(self.y, self.x)] = 2
+            if neighbors[1] == Plant():
+                self.do_score()
+                colors[(self.y, self.x)] = 2
+        elif neighbors[1] == Wall:
+            self.genome.simscore += .1
+        else:
+            self.genome.simscore += .01
 
     def do_south(self, neighbors, world, colors):
         if neighbors[2] not in [Wall, Peater]:
             world[(self.y, self.x)] = Space()
             self.y += 1
             world[(self.y, self.x)] = self
-        if neighbors[2] == Plant():
-            self.genome.simscore += 1
-            colors[(self.y, self.x)] = 2
+            if neighbors[2] == Plant():
+                self.do_score()
+                colors[(self.y, self.x)] = 2
+        elif neighbors[2] == Wall:
+            self.genome.simscore += .1
+        else:
+            self.genome.simscore += .01
 
     def do_west(self, neighbors, world, colors):
         if neighbors[3] not in [Wall, Peater]:
             world[(self.y, self.x)] = Space()
             self.x -= 1
             world[(self.y, self.x)] = self
-        if neighbors[3] == Plant():
-            self.genome.simscore += 1
-            colors[(self.y, self.x)] = 2
+            if neighbors[3] == Plant():
+                self.do_score()
+                colors[(self.y, self.x)] = 2
+        elif neighbors[3] == Wall:
+            self.genome.simscore += .1
+        else:
+            self.genome.simscore += .01
 tiles.register(Peater)

@@ -1,5 +1,5 @@
 import pudb
-import heapq, time, random, sys
+import heapq, time, random, sys, cStringIO
 import curses, _curses, urwid
 from curses import ascii
 from code import InteractiveConsole, InteractiveInterpreter
@@ -42,7 +42,9 @@ class BufferScreen(Screen):
         super(BufferScreen, self).__init__()
         self.ch_bufs = dict() # character buffers
         self.co_bufs = dict() # color buffers
-        self.dirty = False
+        self.dirty = True
+        self.messy = True
+        self.doclear = True
 
     def refresh(self):
         self.s.refresh()
@@ -93,25 +95,25 @@ class BufferScreen(Screen):
     def start(self):
         super(BufferScreen, self).start()
         curses.init_pair(1, curses.COLOR_WHITE, -1)
-        curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_GREEN)
-        curses.init_pair(3, curses.COLOR_GREEN, -1)
+        curses.init_pair(2, curses.COLOR_BLUE, -1)
+        curses.init_pair(3, curses.COLOR_BLUE, curses.COLOR_GREEN)
+        curses.init_pair(4, curses.COLOR_GREEN, -1)
 
     def draw_buffer(self):
-        for coord, tile in self.render_ch_buffer().items():
+        cp = curses.color_pair(1)
+        for coord, tile in self.ch_bufs['main'].items():
             y, x = coord
-            self.s.addch(y, x, ord(tile.char), curses.color_pair(1))
+            self.s.addch(y, x, ord(tile.char), cp)
         self.clear_ch_bufs()
 
     def draw_colors(self):
-        for coord, color in self.render_co_buffer().items():
+        for coord, color in self.co_bufs['main'].items():
             y, x = coord
             self.s.chgat(y, x, 1, curses.color_pair(color))
         self.clear_co_bufs()
 
     def draw_screen(self, (cols, rows), r ):
         """Paint screen with rendered canvas."""
-        if not self.dirty:
-            return
         assert self._started
         
         assert r.rows() == rows, "canvas size and passed size don't match"
@@ -130,12 +132,14 @@ class BufferScreen(Screen):
             lasta = None
             nr = 0
             for a, cs, seg in row:
-                bail = False
-                for char in seg:
-                    if char == chr(0):
-                        bail = True
-                if bail:
+                if not [char for char in seg if char != chr(0)]:
                     break
+                # bail = False
+                # for char in seg:
+                #     if char == chr(0):
+                #         break
+                # if bail:
+                #     break
                 if cs != 'U':
                     seg = seg.translate(UNPRINTABLE_TRANS_TABLE)
                     assert isinstance(seg, bytes)
@@ -165,6 +169,10 @@ class BufferScreen(Screen):
                         # quietly abort.
                         return
                 nr += 1
+
+        self.keep_cache_alive_link = r
+
+    def draw_cursor(self, r):
         if r.cursor is not None:
             x,y = r.cursor
             self._curs_set(1)
@@ -176,8 +184,6 @@ class BufferScreen(Screen):
             self._curs_set(0)
             self.s.move(0,0)
         
-#        self.keep_cache_alive_link = r
-        self.dirty = False
 
 
 class CursesBufferLoop(MainLoop):
@@ -195,10 +201,18 @@ class CursesBufferLoop(MainLoop):
 
         canvas = self._topmost_widget.render(self.screen_size, focus=True)
         cy, cx = self.screen.s.getyx()
-        self.screen.draw_screen(self.screen_size, canvas)
-        self.screen.draw_buffer()
-        self.screen.draw_colors()
+        if self.screen.dirty:
+            self.screen.draw_screen(self.screen_size, canvas)
+        if self.screen.messy:
+            self.screen.draw_buffer()
+            self.screen.draw_colors()
         self.screen.s.move(cy, cx)
+        if self.screen.doclear:
+            self.screen.s.clearok(1)
+        self.screen.draw_cursor(canvas)
+        self.screen.doclear = False
+        self.screen.messy = False
+        self.screen.dirty = False
         self.screen.refresh()
 
     def _run_screen_event_loop(self):
@@ -258,18 +272,24 @@ class BufferFill(urwid.SolidFill):
 
 class CommandEdit(urwid.Edit):
     def __init__(self, log, comcb, *args, **kwargs):
-        super(CommandEdit, self).__init__(*args, **kwargs)
         self.log = log
+        super(CommandEdit, self).__init__(*args, **kwargs)
         self.comcb = comcb
         self.history = []
         self.pointer = -1
         self.maxcol = 0
 
     def _get_input(self):
+        self._invalidate()
         return self.get_edit_text()
     def _set_input(self, val):
+        self._invalidate()
         return self.set_edit_text(val)
     input = property(_get_input, _set_input)
+
+    def _invalidate(self):
+        self.log.app.dirty()
+        super(CommandEdit, self)._invalidate()
 
     def update_input(self, size):
         x, y = self.get_cursor_coords(size)
@@ -279,23 +299,16 @@ class CommandEdit(urwid.Edit):
             self.input = ''
         self.move_cursor_to_coords(size, 'right', y)
 
-    # def render(self, size, *args, **kwargs):
-    #     self.size = size
-    #     super(CommandEdit, self).render((size[0], ), *args, **kwargs)
-
     def keypress(self, size, key):
         cx, cy = self.get_cursor_coords(size)
-        if key=="ctrl r":
-            self.log.app.messy()
-            return
-        elif key=="ctrl d":
-            self.log.app.dirty()
-            return
         if key=="enter" and self.input:
-            self.comcb(self.input)
+            i = self.input
             self.history.insert(0, self.input)
             self.input = ''
             self.pointer = -1
+            self.comcb(i)
+            self.log.app.dirty()
+            self.log.app.clear()
         elif key in ('ctrl p',):
             if self.pointer <= len(self.history) - 2:
                 self.pointer += 1
@@ -321,46 +334,34 @@ class CommandEdit(urwid.Edit):
         else:
             return super(CommandEdit, self).keypress(size, key)
 
+class EaterListBox(urwid.ListBox):
+    def __init__(self, app, *args, **kwargs):
+        self.app = app
+        super(EaterListBox, self).__init__(*args, **kwargs)
+
+    def _invalidate(self):
+        self.app.dirty()
+        super(EaterListBox, self)._invalidate()
+
+
 class EaterConsoleLogWidget(urwid.WidgetWrap):
     INTRO = "eater-experiment v0.1 loaded.\n"
     def __init__(self, app, intro=INTRO):
         self.app = app
         self._log = urwid.Text(' ')
-        self._list = urwid.ListBox(urwid.SimpleListWalker([
-                    self._log]))
+        self._listwalker = urwid.SimpleListWalker([self._log])
+        self._list = EaterListBox(app, self._listwalker)
         self.display = self._list
         urwid.WidgetWrap.__init__(self, self.display)
             
+    def scroll_bottom(self):
+        self._list.set_focus(len(self._listwalker) - 1)
+
+
     def render(self, size, *args, **kwargs):
         self._size = size
         return self.display.render(size)
         
-    def _get_text(self):
-        return self._log.get_text()[0]
-    def _set_text(self, val):
-        self._log.set_text(val)
-        middle, top, bottom = self._list.calculate_visible(
-            self._size, True)
-        focus_row_offset,focus_widget,focus_pos,focus_rows,cursor=middle
-        self.scroll_bottom()
-    text = property(_get_text, _set_text)
-
-    def scroll_top(self):
-        self._list.shift_focus(self._size, 0)
-        self.app.messy()
-
-    def scroll_bottom(self):
-        self._list.set_focus_valign('bottom')
-        return
-        middle, top, bottom = self._list.calculate_visible(
-            self._size, True)
-        focus_row_offset,focus_widget,focus_pos,focus_rows,cursor=middle
-        offset = 5 - focus_rows
-        if focus_rows > 6:
-            self._list.shift_focus(self._size, offset )
-            self.app.messy()
-        
-
 class EaterConsoleWidget(urwid.WidgetWrap):
     def __init__(self, app):
         self.app = app
@@ -370,12 +371,6 @@ class EaterConsoleWidget(urwid.WidgetWrap):
                        urwid.Filler(CommandEdit(self._log, self.on_cmd, ">")))
         self.display = urwid.Pile([self._log, self._input])
         urwid.WidgetWrap.__init__(self, self.display)
-
-    def _get_text(self):
-        return self._log.text
-    def _set_text(self, val):
-        self._log.text = val
-    text = property(_get_text, _set_text)
 
     def keypress(self, size, key):
         if key in ('page down', 'page up'):
@@ -387,18 +382,16 @@ class EaterConsoleWidget(urwid.WidgetWrap):
 
     def on_cmd(self, line):
         oldin, oldout = sys.stdin, sys.stdout
-        sys.stdin, sys.stdout = self, self
+        buf = cStringIO.StringIO()
+        sys.stdin, sys.stdout = buf, buf
         self._cmd.onecmd_plus_hooks(line)
         sys.stdin, sys.stdout = oldin, oldout
-
-    def close(self): pass
-
-    def flush(self): pass
-
-    def fileno(self): return -1
+        self.write(buf.getvalue())
+        self._log._list.set_focus(len(self._log._listwalker) - 1)
 
     def write(self, string):
-        self.text = self.text + string
+        string = string.strip()
+        self._log._listwalker.append(urwid.Text(string))
 
 class EaterScreenWidget(urwid.WidgetWrap):
     def __init__(self, app):

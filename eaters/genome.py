@@ -19,7 +19,7 @@ def GMapInitializator(genome, **args):
             genome.genome[state][key] = genome.choose()
 
 def GMapMutator(genome, **kwargs):
-    pmut = kwargs.get('pmut', o.ga.mutator.pmut)
+    pmut = kwargs.get('pmut', o.ga.mutation.rate)
     if pmut <= 0.0: return 0
     nkeys = len(genome.keys)
     nstates = genome.nstates
@@ -65,10 +65,37 @@ def GMapCrossoverSinglePoint(genome, **args):
             for key in keycut:
                 brother[(state, key)] = mom[(state, key)]
     return (sister, brother)
+
+def GMapCrossoverEveryPoint(genome, **args):
+    sister = None
+    brother = None
+    mom = args['mom']
+    dad = args['dad']
+
+    rate = o.ga.crossover.rate2
+    mom.keys.sort()
+    cut = mom.keys.index(random.choice(mom.keys))
+    keys = mom.keys
+
+    if args['count'] >= 1:
+        sister = mom.clone()
+        sister.resetStats()
+        for state in xrange(mom.nstates):
+            for key in dad.keys[:cut]:
+                if random.random() >= rate:
+                    sister[(state, key)] = dad[(state, key)]
+    if args['count'] == 2:
+        brother = dad.clone()
+        brother.resetStats()
+        for state in xrange(dad.nstates):
+            for key in mom.keys[:cut]:
+                if random.random() >= rate:
+                    brother[(state, key)] = mom[(state, key)]
+    return (sister, brother)
             
 
 def GMapEvaluator(chromosome):
-    return chromosome.simscore
+    return max(0, chromosome.simscore)
 
 
 class GMapBase:
